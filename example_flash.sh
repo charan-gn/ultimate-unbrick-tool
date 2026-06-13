@@ -2,6 +2,8 @@
 # Example: flash OOS 9.5.3 on OnePlus 7 Pro (project 18821)
 # Adjust --loader, --devicemodel, file paths for your device.
 #
+# Flashes both A and B slots so device boots regardless of active slot.
+#
 set -e
 
 EXTRACT="./extract"              # Set this to your OPS extract directory
@@ -9,30 +11,35 @@ LOADER="$EXTRACT/prog_firehose_ddr.elf"
 EDL="python3 edl.py"
 BASE="$EDL --loader=$LOADER --devicemodel=18821"   # Change devicemodel for your device
 
-echo "=== FLASH ==="
+echo "=== FLASH BOTH SLOTS ==="
 
 flash() {
     local part=$1 file=$2 lun=${3:-0}
     echo ">>> LUN$lun: $part  <-  $file"
-    $BASE w "$part" "$EXTRACT/$file" --lun=$lun --memory=ufs || exit 1
+    $BASE w "$part" "$EXTRACT/$file" --lun=$lun --memory=ufs 2>&1 || exit 1
     echo ""
 }
 
-# LUN 0
+echo "--- LUN 0 ---"
 flash param param.bin 0
 flash persist persist.img 0
 flash op2 op2.img 0
 flash oem_dycnvbk dynamic_nvbk.bin 0
 flash oem_stanvbk static_nvbk.bin 0
 flash config config.bin 0
+flash metadata metadata.img 0
 flash system_a system.img 0
 flash odm_a odm.img 0
 
-# LUN 1
+echo "--- LUN 1 ---"
 flash xbl_config_a xbl_config.elf 1
 flash xbl_a xbl.elf 1
 
-# LUN 4
+echo "--- LUN 2 (B-slot XBL) ---"
+flash xbl_config_b xbl_config.elf 2
+flash xbl_b xbl.elf 2
+
+echo "--- LUN 4 ---"
 flash aop_a aop.mbn 4
 flash tz_a tz.mbn 4
 flash hyp_a hyp.mbn 4
@@ -53,10 +60,32 @@ flash imagefv_a imagefv.elf 4
 flash vendor_a vendor.img 4
 flash LOGO_a logo.bin 4
 
-# Shared
+echo "--- LUN 5 (B-slot bootchain) ---"
+flash aop_b aop.mbn 5
+flash tz_b tz.mbn 5
+flash hyp_b hyp.mbn 5
+flash modem_b NON-HLOS.bin 5
+flash bluetooth_b BTFM.bin 5
+flash abl_b abl.elf 5
+flash dsp_b dspso.bin 5
+flash keymaster_b km4.mbn 5
+flash boot_b boot.img 5
+flash cmnlib_b cmnlib.mbn 5
+flash cmnlib64_b cmnlib64.mbn 5
+flash devcfg_b devcfg.mbn 5
+flash qupfw_b qupv3fw.elf 5
+flash vbmeta_b vbmeta.img 5
+flash dtbo_b dtbo.img 5
+flash uefisecapp_b uefi_sec.mbn 5
+flash imagefv_b imagefv.elf 5
+
+echo "--- SHARED ---"
 flash op1 op1.img 4
 
 echo "=== DONE ==="
-echo "Set active slot and reboot:"
-echo "  $BASE setactiveslot a"
-echo "  $BASE reset --resetmode=normal"
+echo "Setting active slot to A..."
+$BASE setactiveslot a 2>&1
+echo "Rebooting..."
+$BASE reset --resetmode=normal 2>&1
+echo ""
+echo "Device should boot. If both slots were corrupted, A is now fresh."
