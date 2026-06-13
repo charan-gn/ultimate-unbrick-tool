@@ -452,16 +452,22 @@ class firehose(metaclass=LogBase):
             self.error(f"Error:{rsp.error}")
             return False
 
-    def wait_for_data(self):
+    def wait_for_data(self, total_timeout=30):
         tmp = bytearray()
-        timeout = 0
+        empty_reads = 0
+        deadline = time.time() + total_timeout
         while b'response value' not in tmp:
-            res = self.cdc.read(timeout=None)
+            if time.time() > deadline:
+                self.error(f"wait_for_data timed out after {total_timeout}s")
+                break
+            res = self.cdc.read(timeout=5)
             if res == b'':
-                timeout += 1
-                if timeout == 4:
+                empty_reads += 1
+                if empty_reads >= 8:
                     break
-                time.sleep(0.1)
+                time.sleep(0.5)
+            else:
+                empty_reads = 0
             tmp += res
         return tmp
 
@@ -518,10 +524,13 @@ class firehose(metaclass=LogBase):
                               self.cfg.SECTOR_SIZE_IN_BYTES
                     wdata += b"\x00" * (filllen - wlen)
 
-                self.cdc.write(wdata)
+                if not self.cdc.write(wdata):
+                    self.error("Write failed: device may have disconnected")
+                    return False
                 progbar.show_progress(prefix="Write", pos=total - bytestowrite, total=total, display=display)
-                self.cdc.write(b'')
-            # time.sleep(0.2)
+                if not self.cdc.write(b''):
+                    self.error("Write flush failed: device may have disconnected")
+                    return False
 
             wd = self.wait_for_data()
             log = self.xml.getlog(wd)
@@ -574,11 +583,14 @@ class firehose(metaclass=LogBase):
                               self.cfg.SECTOR_SIZE_IN_BYTES
                     wrdata += b"\x00" * (filllen - wlen)
 
-                self.cdc.write(wrdata)
+                if not self.cdc.write(wrdata):
+                    self.error("Write failed: device may have disconnected")
+                    return False
 
                 progbar.show_progress(prefix="Write", pos=total - bytestowrite, total=total, display=display)
-                self.cdc.write(b'')
-            # time.sleep(0.2)
+                if not self.cdc.write(b''):
+                    self.error("Write flush failed: device may have disconnected")
+                    return False
 
             wd = self.wait_for_data()
             log = self.xml.getlog(wd)
@@ -594,7 +606,7 @@ class firehose(metaclass=LogBase):
                 return False
         else:
             self.error(f"Error:{rsp.error}")
-        return True
+        return False
 
     def cmd_erase(self, physical_partition_number, start_sector, num_partition_sectors, display=True):
         if display:

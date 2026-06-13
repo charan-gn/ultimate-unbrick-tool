@@ -694,6 +694,8 @@ class firehose_client(metaclass=LogBase):
                 lun = int(options["--lun"])
             else:
                 lun = 0
+            if self.firehose.modules is not None:
+                self.firehose.modules.writeprepare()
             bad = False
             for partitionname in partitions:
                 startsector = 0
@@ -721,8 +723,6 @@ class firehose_client(metaclass=LogBase):
                             bad = True
                             continue
                         startsector = partition.sector
-                    if self.firehose.modules is not None:
-                        self.firehose.modules.writeprepare()
                     if self.firehose.cmd_program(lun, startsector, filename):
                         self.printer(f"Wrote {filename} to sector {str(startsector)}.")
                     else:
@@ -934,6 +934,10 @@ class firehose_client(metaclass=LogBase):
             rawprogram = options["<rawprogram>"].split(",")
             imagedir = options["<imagedir>"]
             patch = options["<patch>"].split(",")
+
+            if self.firehose.modules is not None:
+                self.firehose.modules.writeprepare()
+
             for xml in rawprogram:
                 filename = os.path.join(imagedir, xml)
                 if os.path.exists(filename):
@@ -959,7 +963,8 @@ class firehose_client(metaclass=LogBase):
                                 self.info(f"[qfil] programming {filename} to partition({partition_number})" +
                                           f"@sector({start_sector})...")
 
-                                self.firehose.cmd_program(int(partition_number), int(start_sector), filename)
+                                if not self.firehose.cmd_program(int(partition_number), int(start_sector), filename):
+                                    success = False
                 else:
                     self.warning(f"File : {filename} not found.")
                     success = False
