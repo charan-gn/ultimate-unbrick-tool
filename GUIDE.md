@@ -1,6 +1,6 @@
-# OnePlus 7 Pro EDL Unbrick — Complete Guide
+# EDL Unbrick Guide
 
-## Device: OnePlus 7 Pro GM1917 / 18821 (guacamole)
+## Device focus: OnePlus 7 Pro GM1917 / 18821 (guacamole)
 
 ---
 
@@ -553,7 +553,7 @@ edl/
 │       │   └── oneplus.py          — patched universal auth
 │       ├── firehose.py             — patched cmd_program NAK fix
 │       └── ...
-├── OP7PRO_EDL_MSM_GUIDE.md         — full documentation
+├── GUIDE.md                        — full documentation
 ├── example_flash.sh                — example flash script
 ├── oos9/
 │   └── prog_firehose_ddr.elf       — OOS 9.5.3 firehose programmer

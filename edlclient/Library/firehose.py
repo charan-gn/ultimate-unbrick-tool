@@ -799,8 +799,10 @@ class firehose(metaclass=LogBase):
             resp = self.cmd_read_buffer(lun, 0, 1, False)
         except Exception as err:
             self.debug(str(err))
+            saved = self.skipresponse
             self.skipresponse = True
             resp = self.cmd_read_buffer(lun, 0, 1, False)
+            self.skipresponse = saved
 
         if not resp.resp:
             for line in resp.error:

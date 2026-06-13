@@ -105,3 +105,9 @@ venv.bak/
 .mypy_cache/
 
 edl_config.json
+
+# Proprietary firehose programmer blobs — provide your own
+oos9/
+extract/
+*.ops
+*.elf
