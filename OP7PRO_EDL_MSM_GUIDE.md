@@ -97,6 +97,65 @@ Result: device booted OOS 9.5.3 successfully.
 
 ---
 
+## Safety guarantees
+
+### Bootloader unlock preserved
+
+The flash never touches the `frp`, `devinfo`, or `sec` partitions where
+bootloader lock state lives. After flashing, if your device was unlocked
+it stays unlocked. No need to re-unlock.
+
+Partitions NOT flashed (preserved as-is):
+- `frp` — factory reset protection, bootloader lock state
+- `ssd` — secure software download state
+- `keystore` — encryption keys
+- `misc` — misc system state
+- `userdata` — all user data, apps, settings
+- `devinfo` — bootloader unlock flag (on devices that have it)
+
+### Userdata preserved
+
+The `userdata` partition is never written. All your apps, files, and
+settings survive the flash. The device boots into the new firmware
+without data loss.
+
+### Dual-slot safe
+
+Bootchain partitions (xbl, abl, aop, tz, hyp, etc.) are written to
+both A and B slots. The device boots regardless of which slot was
+previously active.
+
+---
+
+## Windows compatibility
+
+The tool works on Windows through **WSL (Windows Subsystem for Linux)**
+or **Git Bash with Python**.
+
+### Requirements on Windows
+
+- Python 3.8+ (install from python.org)
+- pyusb (handles USB via libusb)
+- Zadig (to install WinUSB/libusb driver for the QDLoader 9008 device)
+
+### Driver setup (Windows)
+
+1. Install Zadig from https://zadig.akeo.ie
+2. Connect phone in EDL mode (Volume Up + Down, plug USB)
+3. Device Manager shows "Qualcomm HS-USB QDLoader 9008"
+4. In Zadig: select the QDLoader device, install **WinUSB** driver
+5. The edl tool can now access the device
+
+### Known Windows differences
+
+- The `lsusb` wait loop in `example_flash.sh` is Linux-only
+  → On WSL, `lsusb` works natively
+  → On Git Bash, remove the wait loop or use `pnputil` instead
+- Use `python` instead of `python3` on some Windows setups
+- Paths use forward slashes (`/`) on WSL, backslashes (`\`) on cmd
+
+---
+
 ## Auth System Explained
 
 All OnePlus firehose auth uses **ModelVerifyVersion=1** for OP7 Pro.

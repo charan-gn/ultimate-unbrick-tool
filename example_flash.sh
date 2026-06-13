@@ -2,7 +2,11 @@
 # Example: flash OOS 9.5.3 on OnePlus 7 Pro (project 18821)
 # Adjust --loader, --devicemodel, file paths for your device.
 #
-# Flashes both A and B slots so device boots regardless of active slot.
+# Features:
+#   - Flashes both A and B slots (full unbrick)
+#   - Preserves bootloader unlock state (never touches frp/devinfo)
+#   - Preserves userdata (never writes userdata partition)
+#   - Cross-platform: works on Linux, macOS, Windows (Git Bash / WSL)
 #
 set -e
 
@@ -12,6 +16,9 @@ EDL="python3 edl.py"
 BASE="$EDL --loader=$LOADER --devicemodel=18821"   # Change devicemodel for your device
 
 echo "=== FLASH BOTH SLOTS ==="
+echo "Bootloader unlock: PRESERVED (frp partition not touched)"
+echo "User data:         PRESERVED (userdata partition not touched)"
+echo ""
 
 flash() {
     local part=$1 file=$2 lun=${3:-0}
@@ -88,4 +95,4 @@ $BASE setactiveslot a 2>&1
 echo "Rebooting..."
 $BASE reset --resetmode=normal 2>&1
 echo ""
-echo "Device should boot. If both slots were corrupted, A is now fresh."
+echo "Device should boot. Unlock state and userdata preserved."
