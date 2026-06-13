@@ -33,6 +33,23 @@ except Exception as e:
     from ..cryptutils import cryptutils
 from binascii import unhexlify, hexlify
 
+KNOWN_PRODKEYS = {
+    "18825": "b2fad511325185e5",
+    "18801": "b2fad511325185e5",
+    "18821": "b2fad511325185e5",
+    "18857": "7016147d58e8c038",
+    "16859": "0000000000000000",
+    "17801": "0000000000000000",
+    "17819": "0000000000000000",
+    "18811": "0000000000000000",
+    "18831": "0000000000000000",
+    "18865": "7016147d58e8c038",
+    "19863": "7016147d58e8c038",
+    "19801": "7016147d58e8c038",
+    "19861": "7016147d58e8c038",
+}
+PRODKEY_FALLBACKS = ["0000000000000000", "7016147d58e8c038", "b2fad511325185e5"]
+
 deviceconfig = {
     # OP5, cheeseburger
     "16859": dict(version=1, cm=None, param_mode=0),
@@ -143,6 +160,7 @@ class oneplus(metaclass=LogBase):
         self.info = self.__logger.info
         self.debug = self.__logger.debug
         self.error = self.__logger.error
+        self.auth_ok = True
         if projid == "":
             res = self.fh.detect_partition(arguments=args, partitionname="param")
             if res[0]:
@@ -173,20 +191,36 @@ class oneplus(metaclass=LogBase):
         self.ops = self.convert_projid(fh, projid, serial)
 
     def getprodkey(self, projid):
-        if projid in ["18825", "18801"]:  # key_guacamoles, fajiita
-            prodkey = "b2fad511325185e5"
-        else:  # key_op7t/op8/N10
-            prodkey = "7016147d58e8c038"
-        return prodkey
+        if projid in KNOWN_PRODKEYS:
+            return KNOWN_PRODKEYS[projid]
+        return "0000000000000000"
 
-    def convert_projid(self, fh, projid, serial):
-        prodkey = self.getprodkey(projid)
+    def generate_pk(self):
         pk = ""
         val = bytearray(b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
         for i in range(0, 16):
             rand = int(random.randint(0, 0x100))
             nr = (rand & 0xFF) % 0x3E
             pk += chr(val[nr])
+        return pk
+
+    def detect_auth_version(self):
+        funcs = self.supported_functions or []
+        if "setprocstart" in funcs:
+            return 3
+        if "setprojmodel" in funcs or "demacia" in funcs:
+            return 1
+        return 0
+
+    def projid_to_cm(self, projid):
+        try:
+            return format(int(projid), 'x')
+        except (ValueError, TypeError):
+            return projid
+
+    def convert_projid(self, fh, projid, serial):
+        prodkey = self.getprodkey(projid)
+        pk = self.generate_pk()
 
         if projid in deviceconfig:
             version = deviceconfig[projid]["version"]
@@ -196,32 +230,42 @@ class oneplus(metaclass=LogBase):
             elif version == 2:
                 if cm is not None:
                     return oneplus1(fh, cm, serial, pk, prodkey, self.cf)
-                else:
-                    assert "Device is not supported"
-                    exit(0)
+                self.error(f"Device config for {projid} has version 2 but no cm")
+                return None
             elif version == 3:
                 if cm is not None:
                     return oneplus2(fh, cm, serial, pk, prodkey, self.ATOBuild, self.Flash_Mode, self.cf)
-                else:
-                    assert "Device is not supported"
-                    exit(0)
-        assert "Unknown projid:" + str(projid)
+                self.error(f"Device config for {projid} has version 3 but no cm")
+                return None
+
+        version = self.detect_auth_version()
+        if version >= 3:
+            cm = self.projid_to_cm(projid)
+            self.info(f"Projid {projid} unknown, using v3 auth (setprocstart) cm={cm}")
+            return oneplus2(fh, cm, serial, pk, prodkey, self.ATOBuild, self.Flash_Mode, self.cf)
+        elif version == 1:
+            self.info(f"Projid {projid} unknown, using v1 auth (demacia+setprojmodel)")
+            return oneplus1(fh, projid, serial, pk, prodkey, self.cf)
+        self.info("No OnePlus auth functions detected, skipping auth")
         return None
 
     def run(self):
         if self.ops is not None:
             if "demacia" in self.supported_functions:
                 if not self.ops.run("demacia"):
-                    exit(0)
+                    self.auth_ok = False
+                    self.error("demacia failed, writes may still work without auth")
             if "SetNetType" in self.supported_functions:
                 self.fh.cmd_send(f"SetNetType")
-            elif "setprojmodel" in self.supported_functions:
+            if "setprojmodel" in self.supported_functions:
                 if not self.ops.run(""):
-                    exit(0)
+                    self.auth_ok = False
+                    self.error("setprojmodel failed, writes will proceed without auth tokens")
             if "setprocstart" in self.supported_functions:
                 if not self.ops.run(""):
-                    exit(0)
-        return True
+                    self.auth_ok = False
+                    self.error("setprocstart/setswprojmodel failed, writes will proceed without auth")
+        return self.auth_ok
 
     def setprojmodel_verify(self, pk, token):
         if self.ops.setprojmodel_verify:
@@ -248,18 +292,18 @@ class oneplus(metaclass=LogBase):
         return None
 
     def addpatch(self):
-        if "setprojmodel" in self.supported_functions or "setswprojmodel" in self.supported_functions:
+        if self.auth_ok and (self.ops is not None) and \
+           ("setprojmodel" in self.supported_functions or "setswprojmodel" in self.supported_functions):
             pk, token = self.ops.generatetoken(True)
             return f"pk=\"{pk}\" token=\"{token}\" "
-        else:
-            return ""
+        return ""
 
     def addprogram(self):
-        if "setprojmodel" in self.supported_functions or "setswprojmodel" in self.supported_functions:
+        if self.auth_ok and (self.ops is not None) and \
+           ("setprojmodel" in self.supported_functions or "setswprojmodel" in self.supported_functions):
             pk, token = self.ops.generatetoken(True)
             return f"pk=\"{pk}\" token=\"{token}\" "
-        else:
-            return ""
+        return ""
 
 
 class oneplus1:
@@ -268,8 +312,8 @@ class oneplus1:
         self.prodkey = prodkey
         self.ModelVerifyPrjName = ModelVerifyPrjName
         self.fh = fh
-        self.random_postfix = "0iyFR00pPnoqjVNL"
-        self.Version = "guacamoles_21_O.22_191107"
+        self.random_postfix = "8MwDdWXZO7sj0PF3"
+        self.Version = "guacamole_21_H.04_190416"
         self.cf = str(cf)
         self.soc_sn = str(serial)
 
@@ -404,16 +448,29 @@ class oneplus1:
             pk, token = self.demacia()
             res = self.fh.cmd_send(f"demacia token=\"{token}\" pk=\"{pk}\"")
             if b"verify_res=\"0\"" not in res:
-                print("Demacia failed:")
-                print(res)
+                self.fh.error("Demacia failed:")
+                self.fh.error(res.decode() if isinstance(res, bytes) else str(res))
                 return False
-        pk, token = self.generatetoken(False)
-        res = self.fh.cmd_send(f"setprojmodel token=\"{token}\" pk=\"{pk}\"")
-        if b"model_check=\"0\"" not in res or b"auth_token_verify=\"0\"" not in res:
-            print("Setprojmodel failed.")
-            print(res)
-            return False
-        return True
+            return True
+        # Try setprojmodel with current prodkey, fall back to alternatives
+        tried = set()
+        candidates = [self.prodkey] + [k for k in PRODKEY_FALLBACKS if k != self.prodkey]
+        for prodkey in candidates:
+            if prodkey in tried:
+                continue
+            tried.add(prodkey)
+            self.prodkey = prodkey
+            pk, token = self.generatetoken(False)
+            res = self.fh.cmd_send(f"setprojmodel token=\"{token}\" pk=\"{pk}\"")
+            r = res.decode() if isinstance(res, bytes) else str(res)
+            if b"value=\"ACK\"" in res:
+                return True
+            if b"opcmd is not enabled" in res:
+                self.fh.error("setprojmodel failed: opcmd not enabled in this programmer")
+                return False
+            self.fh.info(f"setprojmodel failed with prodkey {prodkey}, trying next...")
+        self.fh.error("setprojmodel failed with all prodkeys")
+        return False
 
     def program_verify(self, pk, token, tokendata):
         print()
@@ -490,21 +547,24 @@ class oneplus2(metaclass=LogBase):
 
     def run(self, flag):
         res = self.fh.cmd_send(f"setprocstart")
-        if not b"device_timestamp" in res:
-            print("Setprocstart failed.")
-            print(res.decode('utf-8'))
+        r = res.decode() if isinstance(res, bytes) else str(res)
+        if not "device_timestamp" in r:
+            self.fh.error("Setprocstart failed.")
+            self.fh.error(r)
             return False
-        data = res.decode('utf-8')
+        data = r
         device_timestamp = data[data.rfind("device_timestamp"):].split("\"")[1]
         self.device_timestamp = int(device_timestamp)
-        print(self.device_timestamp)
+        self.fh.info(f"Device timestamp: {self.device_timestamp}")
         pk, token = self.generatetoken(False)
         res = self.fh.cmd_send(f"setswprojmodel token=\"{token}\" pk=\"{pk}\"")
-        if not b"model_check=\"0\"" in res or not b"auth_token_verify=\"0\"" in res:
-            print("Setswprojmodel failed.")
-            print(res.decode('utf-8'))
-            return False
-        return True
+        r = res.decode() if isinstance(res, bytes) else str(res)
+        if "model_check=\"0\"" in r and "auth_token_verify=\"0\"" in r:
+            self.fh.info("setswprojmodel auth OK")
+            return True
+        self.fh.error("setswprojmodel auth failed, writes will proceed without tokens")
+        self.fh.error(r)
+        return False
 
     def setswprojmodel_verify(self, pk, token):
         self.pk = pk

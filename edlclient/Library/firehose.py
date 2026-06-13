@@ -498,39 +498,43 @@ class firehose(metaclass=LogBase):
                 data += self.modules.addprogram()
             data += f"/>\n</data>"
             rsp = self.xmlsend(data, self.skipresponse)
+            if not rsp.resp:
+                self.error(f"Program command failed:")
+                for line in rsp.error:
+                    self.error(line)
+                return False
             progbar.show_progress(prefix="Write", pos=0, total=total, display=display)
-            if rsp.resp:
-                while bytestowrite > 0:
-                    wlen = min(bytestowrite, self.cfg.MaxPayloadSizeToTargetInBytes)
+            while bytestowrite > 0:
+                wlen = min(bytestowrite, self.cfg.MaxPayloadSizeToTargetInBytes)
 
-                    if sparseformat:
-                        wdata = sparse.read(wlen)
-                    else:
-                        wdata = rf.read(wlen)
-                    bytestowrite -= wlen
-
-                    if wlen % self.cfg.SECTOR_SIZE_IN_BYTES != 0:
-                        filllen = (wlen // self.cfg.SECTOR_SIZE_IN_BYTES * self.cfg.SECTOR_SIZE_IN_BYTES) + \
-                                  self.cfg.SECTOR_SIZE_IN_BYTES
-                        wdata += b"\x00" * (filllen - wlen)
-
-                    self.cdc.write(wdata)
-                    progbar.show_progress(prefix="Write", pos=total - bytestowrite, total=total, display=display)
-                    self.cdc.write(b'')
-                # time.sleep(0.2)
-
-                wd = self.wait_for_data()
-                log = self.xml.getlog(wd)
-                rsp = self.xml.getresponse(wd)
-                if "value" in rsp:
-                    if rsp["value"] != "ACK":
-                        self.error(f"Error:")
-                        for line in log:
-                            self.error(line)
-                        return False
+                if sparseformat:
+                    wdata = sparse.read(wlen)
                 else:
-                    self.error(f"Error:{rsp}")
+                    wdata = rf.read(wlen)
+                bytestowrite -= wlen
+
+                if wlen % self.cfg.SECTOR_SIZE_IN_BYTES != 0:
+                    filllen = (wlen // self.cfg.SECTOR_SIZE_IN_BYTES * self.cfg.SECTOR_SIZE_IN_BYTES) + \
+                              self.cfg.SECTOR_SIZE_IN_BYTES
+                    wdata += b"\x00" * (filllen - wlen)
+
+                self.cdc.write(wdata)
+                progbar.show_progress(prefix="Write", pos=total - bytestowrite, total=total, display=display)
+                self.cdc.write(b'')
+            # time.sleep(0.2)
+
+            wd = self.wait_for_data()
+            log = self.xml.getlog(wd)
+            rsp = self.xml.getresponse(wd)
+            if "value" in rsp:
+                if rsp["value"] != "ACK":
+                    self.error(f"Error:")
+                    for line in log:
+                        self.error(line)
                     return False
+            else:
+                self.error(f"Error:{rsp}")
+                return False
         return True
 
     def cmd_program_buffer(self, physical_partition_number, start_sector, wfdata, display=True):
@@ -1177,6 +1181,7 @@ class firehose(metaclass=LogBase):
                 self.debug(info[0])
         if len(info) > 0:
             supfunc = False
+            self.supported_functions = ["demacia", "setprojmodel"]
             for line in info:
                 self.info(line)
                 if "chip serial num" in line.lower():

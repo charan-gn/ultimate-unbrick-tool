@@ -314,7 +314,7 @@ class main(metaclass=LogBase):
                 if "data" in conninfo:
                     data = conninfo["data"]
                     if data.mode == sahara_mode_t.SAHARA_MODE_MEMORY_DEBUG:
-                        if self.args["memorydump"] or self.cdc.pid == 0x900E:
+                        if self.args["memorydump"]:
                             time.sleep(0.5)
                             print("Device is in memory dump mode, dumping memory")
                             if self.args["--partitions"]:
@@ -323,28 +323,24 @@ class main(metaclass=LogBase):
                                 self.sahara.debug_mode(version=version)
                             return self.exit()
                         else:
-                            print("Device is in streaming mode, uploading loader")
+                            print("Device is in crashdump mode, switching to command mode to upload loader...")
                             self.cdc.timeout = None
-                            sahara_info = self.sahara.streaminginfo()
-                            if sahara_info:
-                                sahara_connect = self.sahara.connect()
-                                if len(sahara_connect) == 3:
-                                    mode, cmd, resp = sahara_connect
+                            if self.sahara.enter_command_mode(version=version):
+                                mode = self.sahara.upload_loader(version=version)
+                                if "enprg" in self.sahara.programmer.lower():
+                                    mode = "load_enandprg"
+                                elif "nprg" in self.sahara.programmer.lower():
+                                    mode = "load_nandprg"
+                                elif mode != "":
+                                    mode = "load_" + mode
+                                if "load_" in mode:
+                                    time.sleep(0.3)
                                 else:
-                                    mode, resp = sahara_connect
-                                if mode == "sahara":
-                                    mode = self.sahara.upload_loader(version=version)
-                                    if "enprg" in self.sahara.programmer.lower():
-                                        mode = "load_enandprg"
-                                    elif "nprg" in self.sahara.programmer.lower():
-                                        mode = "load_nandprg"
-                                    elif mode != "":
-                                        mode = "load_" + mode
-                                    if "load_" in mode:
-                                        time.sleep(0.3)
-                                    else:
-                                        print("Error, couldn't find suitable enprg/nprg loader :(")
-                                        return self.exit()
+                                    print("Error, couldn't find suitable enprg/nprg loader :(")
+                                    return self.exit()
+                            else:
+                                print("Error: Could not switch to command mode from memory debug.")
+                                return self.exit()
                     else:
                         sahara_info = self.sahara.cmd_info(version=version)
                         if sahara_info is not None:

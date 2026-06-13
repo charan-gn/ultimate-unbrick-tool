@@ -72,6 +72,15 @@ class modules(metaclass=LogBase):
             self.error(e)
             return None
 
+    def writeprepare(self):
+        if self.ops is not None:
+            try:
+                return self.ops.run()
+            except Exception as e:
+                self.error(f"Auth prepare failed (non-fatal): {e}")
+                return False
+        return True
+
     @cached_property
     def xiaomi(self):
         try:
@@ -93,11 +102,6 @@ class modules(metaclass=LogBase):
     def edlauth(self):
         if self.xiaomi is not None:
             return self.xiaomi.edl_auth()
-        return True
-
-    def writeprepare(self):
-        if self.ops is not None:
-            return self.ops.run()
         return True
 
     def run(self, command, args):
