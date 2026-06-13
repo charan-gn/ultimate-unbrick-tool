@@ -283,27 +283,27 @@ class oneplus(metaclass=LogBase):
         return self.ops.generatetoken(program=program)
 
     def demacia(self):
-        if self.ops.demacia():
+        if self.ops is not None:
             return self.ops.demacia()
+        return None
 
     def enable_ops(self, data, enable, projid, serial):
         if self.ops_parm is not None:
             return self.ops_parm.enable_ops(data, enable)
         return None
 
-    def addpatch(self):
+    def addtoken(self):
         if self.auth_ok and (self.ops is not None) and \
            ("setprojmodel" in self.supported_functions or "setswprojmodel" in self.supported_functions):
             pk, token = self.ops.generatetoken(True)
             return f"pk=\"{pk}\" token=\"{token}\" "
         return ""
 
+    def addpatch(self):
+        return self.addtoken()
+
     def addprogram(self):
-        if self.auth_ok and (self.ops is not None) and \
-           ("setprojmodel" in self.supported_functions or "setswprojmodel" in self.supported_functions):
-            pk, token = self.ops.generatetoken(True)
-            return f"pk=\"{pk}\" token=\"{token}\" "
-        return ""
+        return self.addtoken()
 
 
 class oneplus1:
@@ -447,9 +447,10 @@ class oneplus1:
         if flag == "demacia":
             pk, token = self.demacia()
             res = self.fh.cmd_send(f"demacia token=\"{token}\" pk=\"{pk}\"")
-            if b"verify_res=\"0\"" not in res:
+            r = res.decode() if isinstance(res, bytes) else str(res)
+            if "verify_res=\"0\"" not in r:
                 self.fh.error("Demacia failed:")
-                self.fh.error(res.decode() if isinstance(res, bytes) else str(res))
+                self.fh.error(r)
                 return False
             return True
         # Try setprojmodel with current prodkey, fall back to alternatives
@@ -463,9 +464,9 @@ class oneplus1:
             pk, token = self.generatetoken(False)
             res = self.fh.cmd_send(f"setprojmodel token=\"{token}\" pk=\"{pk}\"")
             r = res.decode() if isinstance(res, bytes) else str(res)
-            if b"value=\"ACK\"" in res:
+            if "value=\"ACK\"" in r:
                 return True
-            if b"opcmd is not enabled" in res:
+            if "opcmd is not enabled" in r:
                 self.fh.error("setprojmodel failed: opcmd not enabled in this programmer")
                 return False
             self.fh.info(f"setprojmodel failed with prodkey {prodkey}, trying next...")

@@ -429,7 +429,10 @@ class modules:
 
 ---
 
-## Full flash script
+## Full flash script (simplified, A-slot only)
+
+See `example_flash.sh` for the full dual-slot version with B-slot
+backup and dry-run support. This is a minimal single-slot example:
 
 ```bash
 #!/bin/bash
@@ -484,7 +487,7 @@ flash vendor_a vendor.img 4
 # Set active slot and reboot
 $BASE setactiveslot a
 $BASE reset --resetmode=normal
-echo "Done. Phone should boot OOS 9."
+echo "Done. Unlock state and userdata preserved."
 ```
 
 ---

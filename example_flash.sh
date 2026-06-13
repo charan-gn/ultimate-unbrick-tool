@@ -1,19 +1,27 @@
 #!/bin/bash
-# Example: flash OOS 9.5.3 on OnePlus 7 Pro (project 18821)
+# Example: flash firmware on OnePlus/Qualcomm device via EDL
 # Adjust --loader, --devicemodel, file paths for your device.
 #
 # Features:
 #   - Flashes both A and B slots (full unbrick)
 #   - Preserves bootloader unlock state (never touches frp/devinfo)
 #   - Preserves userdata (never writes userdata partition)
+#   - --dry-run: preview what would be flashed without writing
 #   - Cross-platform: works on Linux, macOS, Windows (Git Bash / WSL)
 #
 set -e
+
+DRY_RUN=false
+[[ "$1" == "--dry-run" ]] && DRY_RUN=true
 
 EXTRACT="./extract"              # Set this to your OPS extract directory
 LOADER="$EXTRACT/prog_firehose_ddr.elf"
 EDL="python3 edl.py"
 BASE="$EDL --loader=$LOADER --devicemodel=18821"   # Change devicemodel for your device
+
+if $DRY_RUN; then
+    echo "=== DRY RUN — no writes will be performed ==="
+fi
 
 echo "=== FLASH BOTH SLOTS ==="
 echo "Bootloader unlock: PRESERVED (frp partition not touched)"
@@ -22,8 +30,16 @@ echo ""
 
 flash() {
     local part=$1 file=$2 lun=${3:-0}
+    local path="$EXTRACT/$file"
+    if [ ! -f "$path" ]; then
+        echo "!!! SKIP $part: $path not found"
+        return 0
+    fi
     echo ">>> LUN$lun: $part  <-  $file"
-    $BASE w "$part" "$EXTRACT/$file" --lun=$lun --memory=ufs 2>&1 || exit 1
+    if $DRY_RUN; then
+        return 0
+    fi
+    $BASE w "$part" "$path" --lun=$lun --memory=ufs 2>&1 || exit 1
     echo ""
 }
 
@@ -89,7 +105,12 @@ flash imagefv_b imagefv.elf 5
 echo "--- SHARED ---"
 flash op1 op1.img 4
 
-echo "=== DONE ==="
+if $DRY_RUN; then
+    echo "=== DRY RUN COMPLETE — nothing was written ==="
+    exit 0
+fi
+
+echo "=== DONE FLASHING ==="
 echo "Setting active slot to A..."
 $BASE setactiveslot a 2>&1
 echo "Rebooting..."
