@@ -480,15 +480,20 @@ python3 edl.py --loader=prog_firehose_ddr.elf --devicemodel=18821 \
 
 ---
 
-## Files on this machine
+## Repo structure
 
 ```
-/home/charan/edl/                          — edl tool (bkerler)
-/home/charan/edl/edlclient/Library/Modules/oneplus.py  — patched auth
-/home/charan/edl/edlclient/Library/firehose.py          — patched cmd_program
-/home/charan/auto_flash_oos9.sh            — flash script (OOS 9)
-/home/charan/edl/oos9/prog_firehose_ddr.elf  — working OOS 9 programmer
-/home/charan/Downloads/OnePlus_7_Pro_Global_OxygenOS_9.5.3/  — OOS 9 OPS + extract
-/home/charan/Downloads/OnePlus_7_Pro_Global_OxygenOS_11.0.5.1/  — OOS 11 OTA zip
-/tmp/oppo_decrypt/                         — OPS decryption tool
+edl/
+├── edl.py                          — main EDL tool
+├── edlclient/
+│   └── Library/
+│       ├── Modules/
+│       │   └── oneplus.py          — patched universal auth
+│       ├── firehose.py             — patched cmd_program NAK fix
+│       └── ...
+├── OP7PRO_EDL_MSM_GUIDE.md         — full documentation
+├── example_flash.sh                — example flash script
+├── oos9/
+│   └── prog_firehose_ddr.elf       — OOS 9.5.3 firehose programmer
+└── ...
 ```
